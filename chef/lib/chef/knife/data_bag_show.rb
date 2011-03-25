@@ -1,7 +1,6 @@
 #
 # Author:: Adam Jacob (<adam@opscode.com>)
-# Author:: Seth Falcon (<seth@opscode.com>)
-# Copyright:: Copyright (c) 2009-2010 Opscode, Inc.
+# Copyright:: Copyright (c) 2009 Opscode, Inc.
 # License:: Apache License, Version 2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,47 +26,12 @@ class Chef
       banner "knife data bag show BAG [ITEM] (options)"
       category "data bag"
 
-      option :secret,
-      :short => "-s SECRET",
-      :long  => "--secret ",
-      :description => "The secret key to use to decrypt data bag item values"
-
-      option :secret_file,
-      :long => "--secret_file SECRET_FILE",
-      :description => "A file containing the secret key to use to decrypt data bag item values"
-
-      def read_secret
-        if config[:secret]
-          config[:secret]
-        else
-          Chef::EncryptedDataBagItem.load_secret(config[:secret_file])
-        end
-      end
-
-      def use_encryption
-        if config[:secret] && config[:secret_file]
-          stdout.puts "please specify only one of --secret, --secret_file"
-          exit(1)
-        end
-        config[:secret] || config[:secret_file]
-      end
-
       def run
         display = case @name_args.length
                   when 2
-                    if use_encryption
-                      raw = Chef::EncryptedDataBagItem.load(@name_args[0],
-                                                            @name_args[1],
-                                                            read_secret)
-                      format_for_display(raw.to_hash)
-                    else
-                      format_for_display(Chef::DataBagItem.load(@name_args[0], @name_args[1]))
-                    end
-                  when 1
-                    format_list_for_display(Chef::DataBag.load(@name_args[0]))
+                    format_for_display(Chef::DataBagItem.load(@name_args[0], @name_args[1]))
                   else
-                    stdout.puts opt_parser
-                    exit(1)
+                    format_list_for_display(Chef::DataBag.load(@name_args[0]))
                   end
         output(display)
       end

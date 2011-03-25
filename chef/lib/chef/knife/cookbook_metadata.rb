@@ -37,10 +37,14 @@ class Chef
         :description => "Generate metadata for all cookbooks, rather than just a single cookbook"
 
       def run
-        config[:cookbook_path] ||= Chef::Config[:cookbook_path]
+        if config[:cookbook_path]
+          Chef::Config[:cookbook_path] = config[:cookbook_path]
+        else
+          config[:cookbook_path] = Chef::Config[:cookbook_path]
+        end
 
         if config[:all]
-          cl = Chef::CookbookLoader.new(config[:cookbook_path])
+          cl = Chef::CookbookLoader.new
           cl.each do |cname, cookbook|
             generate_metadata(cname.to_s)
           end

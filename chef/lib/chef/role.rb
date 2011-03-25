@@ -24,7 +24,7 @@ require 'chef/mixin/from_file'
 require 'chef/couchdb'
 require 'chef/run_list'
 require 'chef/index_queue'
-require 'chef/mash'
+require 'extlib'
 require 'chef/json_compat'
 
 class Chef
@@ -68,7 +68,7 @@ class Chef
       @description = ''
       @default_attributes = Mash.new
       @override_attributes = Mash.new
-      @env_run_lists = {"_default" => Chef::RunList.new}
+      @run_list = Chef::RunList.new
       @couchdb_rev = nil
       @couchdb_id = nil
       @couchdb = couchdb || Chef::CouchDB.new
@@ -104,42 +104,15 @@ class Chef
     end
 
     def run_list(*args)
-      if (args.length > 0)
-        @env_run_lists["_default"].reset!(args)
-      end
-      @env_run_lists["_default"]
+      (args.length > 0) ? @run_list.reset!(args) : @run_list
     end
 
     alias_method :recipes, :run_list
 
-    # For run_list expansion
-    def run_list_for(environment)
-      if env_run_lists[environment].nil?
-        env_run_lists["_default"]
-      else
-        env_run_lists[environment]
-      end
-    end
-
-    def active_run_list_for(environment)
-      @env_run_lists.has_key?(environment) ? environment : '_default'
-    end
-
-    # Per environment run lists
-    def env_run_lists(env_run_lists=nil)
-      if (!env_run_lists.nil?)
-        unless env_run_lists.key?("_default")
-          msg = "_default key is required in env_run_lists.\n"
-          msg << "(env_run_lists: #{env_run_lists.inspect})"
-          raise Chef::Exceptions::InvalidEnvironmentRunListSpecification, msg
-        end
-        @env_run_lists.clear
-        env_run_lists.each { |k,v| @env_run_lists[k] = Chef::RunList.new(*Array(v))}
-      end
-      @env_run_lists
-    end
-
-    alias :env_run_list :env_run_lists
+#     def recipes(*args)
+#       Chef::Log.warn "Chef::Role#recipes method is deprecated.  Please use Chef::Role#run_list"
+#       run_list(*args)
+#     end
 
     def default_attributes(arg=nil)
       set_or_return(
@@ -158,8 +131,6 @@ class Chef
     end
 
     def to_hash
-      env_run_lists_without_default = @env_run_lists.dup
-      env_run_lists_without_default.delete("_default")
       result = {
         "name" => @name,
         "description" => @description,
@@ -167,8 +138,7 @@ class Chef
         "default_attributes" => @default_attributes,
         "override_attributes" => @override_attributes,
         "chef_type" => "role",
-        "run_list" => run_list,
-        "env_run_lists" => env_run_lists_without_default
+        "run_list" => @run_list.run_list
       }
       result["_rev"] = couchdb_rev if couchdb_rev
       result
@@ -179,15 +149,6 @@ class Chef
       to_hash.to_json(*a)
     end
 
-    def update_from!(o)
-      description(o.description)
-      recipes(o.recipes) if defined?(o.recipes)
-      default_attributes(o.default_attributes)
-      override_attributes(o.override_attributes)
-      env_run_lists(o.env_run_lists) unless o.env_run_lists.nil?
-      self
-    end
-
     # Create a Chef::Role from JSON
     def self.json_create(o)
       role = new
@@ -195,18 +156,11 @@ class Chef
       role.description(o["description"])
       role.default_attributes(o["default_attributes"])
       role.override_attributes(o["override_attributes"])
-
-      # _default run_list is in 'run_list' for newer clients, and
-      # 'recipes' for older clients.
-      env_run_list_hash = {"_default" => (o.has_key?("run_list") ? o["run_list"] : o["recipes"])}
-
-      # Clients before 0.10 do not include env_run_lists, so only
-      # merge if it's there.
-      if o["env_run_lists"]
-        env_run_list_hash.merge!(o["env_run_lists"])
-      end
-      role.env_run_lists(env_run_list_hash)
-
+      role.run_list(if o.has_key?("run_list")
+                      o["run_list"]
+                    else
+                      o["recipes"]
+                    end)
       role.couchdb_rev = o["_rev"] if o.has_key?("_rev")
       role.index_id = role.couchdb_id
       role.couchdb_id = o["_id"] if o.has_key?("_id")
@@ -250,14 +204,6 @@ class Chef
       rescue Chef::Exceptions::CouchDBNotFound
         nil
       end
-    end
-
-    def environment(env_name)
-      chef_server_rest.get_rest("roles/#{@name}/environments/#{env_name}")
-    end
-
-    def environments
-      chef_server_rest.get_rest("roles/#{@name}/environments")
     end
 
     # Remove this role from the CouchDB

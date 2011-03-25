@@ -28,18 +28,14 @@ class Chef
     include Mixlib::CLI
     extend Chef::Mixin::ConvertToClassName
 
-    CHEF_FILE_IN_GEM = /chef-[\d]+\.[\d]+\.[\d]+/
-    CURRENT_CHEF_GEM = /chef-#{Regexp.escape(Chef::VERSION)}/
+    # The "require paths" of the core knife subcommands bundled with chef
+    DEFAULT_SUBCOMMAND_FILES = Dir[File.expand_path(File.join(File.dirname(__FILE__), 'knife', '*.rb'))]
+    DEFAULT_SUBCOMMAND_FILES.map! { |knife_file| knife_file[/#{CHEF_ROOT}#{Regexp.escape(File::SEPARATOR)}(.*)\.rb/,1] }
 
     attr_accessor :name_args
 
     def self.msg(msg="")
       puts msg
-    end
-
-    def self.reset_subcommands!
-      @@subcommands = {}
-      @subcommands_by_category = nil
     end
 
     def self.inherited(subclass)
@@ -90,7 +86,7 @@ class Chef
 
     # Load all the sub-commands
     def self.load_commands
-      find_subcommand_files.each { |subcommand| require subcommand }
+      DEFAULT_SUBCOMMAND_FILES.each { |subcommand| require subcommand }
       subcommands
     end
 
@@ -125,7 +121,7 @@ class Chef
     def self.run(args, options={})
       load_commands
       subcommand_class = subcommand_class_from(args)
-      subcommand_class.options = options.merge!(subcommand_class.options)
+      subcommand_class.options.merge!(options)
       instance = subcommand_class.new(args)
       instance.configure_chef
       instance.run
@@ -187,68 +183,6 @@ class Chef
       (args.any? { |arg| arg =~ /^(:?(:?\-\-)?help|\-h)$/})
     end
 
-    @@chef_config_dir = nil
-
-    # search upward from current_dir until .chef directory is found
-    def self.chef_config_dir
-      if @@chef_config_dir.nil? # share this with subclasses
-        @@chef_config_dir = false
-        full_path = Dir.pwd.split(File::SEPARATOR)
-        (full_path.length - 1).downto(0) do |i|
-          canidate_directory = File.join(full_path[0..i] + [".chef" ])
-          if File.exist?(canidate_directory) && File.directory?(canidate_directory)
-            @@chef_config_dir = canidate_directory
-            break
-          end
-        end
-      end
-      @@chef_config_dir
-    end
-
-    # Returns an Array of paths to knife commands located in chef_config_dir/plugins/knife/
-    # and ~/.chef/plugins/knife/
-    def self.site_subcommands
-      user_specific_files = []
-
-      if chef_config_dir
-        user_specific_files.concat Dir.glob(File.expand_path("plugins/knife/*.rb", chef_config_dir))
-      end
-
-      # finally search ~/.chef/plugins/knife/*.rb
-      user_specific_files.concat Dir.glob(File.join(ENV['HOME'], '.chef', 'plugins', 'knife', '*.rb'))
-
-      user_specific_files.map! { |path| path[/(.+).rb/, 1] }
-      user_specific_files
-    end
-
-    # Returns an Array of paths to knife commands built-in to chef, or installed via gem.
-    # If rubygems is not installed, falls back to globbing the knife directory.
-    def self.gem_and_builtin_subcommands
-      begin
-        # search all gems for chef/knife/*.rb
-        require 'rubygems'
-        files = Gem.find_files 'chef/knife/*.rb'
-        # wow, this is a sad hack :(
-        # Gem.find_files finds files in all versions of a gem, which
-        # means that if chef 0.10 and 0.9.x are installed, we'll try to
-        # require, e.g., chef/knife/ec2_server_create, which will cause
-        # a gem activation error. So remove files from older chef gems.
-        files.reject! {|f| f =~ CHEF_FILE_IN_GEM && f !~ CURRENT_CHEF_GEM }
-        files.map! do |file|
-          file[/(#{Regexp.escape File.join('chef', 'knife', '')}.*\.rb)/, 1]
-        end.uniq!
-      rescue LoadError
-        # The "require paths" of the core knife subcommands bundled with chef
-        files = Dir[File.expand_path(File.join(File.dirname(__FILE__), 'knife', '*.rb'))]
-        files.map! { |knife_file| knife_file[/#{CHEF_ROOT}#{Regexp.escape(File::SEPARATOR)}(.*)\.rb/,1] }
-      end
-      files
-    end
-
-    def self.find_subcommand_files
-      @@subcommand_files ||= (gem_and_builtin_subcommands + site_subcommands).flatten.uniq
-    end
-
     public
 
     # Create a new instance of the current class configured for the given
@@ -305,9 +239,13 @@ class Chef
 
     def configure_chef
       unless config[:config_file]
-        if self.class.chef_config_dir
-          candidate_config = File.expand_path('knife.rb',self.class.chef_config_dir)
-          config[:config_file] = candidate_config if File.exist?(candidate_config)
+        full_path = Dir.pwd.split(File::SEPARATOR)
+        (full_path.length - 1).downto(0) do |i|
+          config_file_to_check = File.join([ full_path[0..i], ".chef", "knife.rb" ].flatten)
+          if File.exists?(config_file_to_check)
+            config[:config_file] = config_file_to_check 
+            break
+          end
         end
         # If we haven't set a config yet and $HOME is set, and the home
         # knife.rb exists, use it:
@@ -324,20 +262,11 @@ class Chef
         self.msg("No knife configuration file found")
       end
 
-      Chef::Config[:log_level]         = config[:log_level]       if config[:log_level]
-      Chef::Config[:log_location]      = config[:log_location]    if config[:log_location]
-      Chef::Config[:node_name]         = config[:node_name]       if config[:node_name]
-      Chef::Config[:client_key]        = config[:client_key]      if config[:client_key]
-      Chef::Config[:chef_server_url]   = config[:chef_server_url] if config[:chef_server_url]
-      Chef::Config[:environment]       = config[:environment]     if config[:environment]
-
-      # Expand a relative path from the config directory. Config from command
-      # line should already be expanded, and absolute paths will be unchanged.
-      if Chef::Config[:client_key] && config[:config_file]
-        Chef::Config[:client_key] = File.expand_path(Chef::Config[:client_key], File.dirname(config[:config_file]))
-      end
-
-      Mixlib::Log::Formatter.show_time = false
+      Chef::Config[:log_level] = config[:log_level] if config[:log_level]
+      Chef::Config[:log_location] = config[:log_location] if config[:log_location]
+      Chef::Config[:node_name] = config[:node_name] if config[:node_name]
+      Chef::Config[:client_key] = config[:client_key] if config[:client_key]
+      Chef::Config[:chef_server_url] = config[:chef_server_url] if config[:chef_server_url]
       Chef::Log.init(Chef::Config[:log_location])
       Chef::Log.level(Chef::Config[:log_level])
 
@@ -393,28 +322,10 @@ class Chef
       elsif config[:run_list]
         data = data.run_list.run_list
         { "run_list" => data }
-      elsif config[:environment]
-        if data.class == Chef::Node
-          {"chef_environment" => data.chef_environment}
-        else
-          # this is a place holder for now. Feel free to modify (i.e. add other cases). [nuo]
-          data
-        end
       elsif config[:id_only]
         data.respond_to?(:name) ? data.name : data["id"]
       else
         data
-      end
-    end
-
-    def format_cookbook_list_for_display(item)
-      if config[:with_uri]
-        item
-      else
-        item.inject({}){|result, (k,v)|
-          result[k] = v["versions"].inject([]){|res, ver| res.push(ver["version"]); res}
-          result
-        }
       end
     end
 
@@ -472,8 +383,6 @@ class Chef
         relative_path = "nodes"
       elsif klass == Chef::DataBagItem
         relative_path = "data_bags/#{bag}"
-      elsif klass == Chef::Environment
-        relative_path = "environments"
       end
 
       relative_file = File.expand_path(File.join(Dir.pwd, relative_path, from_file))

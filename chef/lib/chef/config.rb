@@ -82,7 +82,6 @@ class Chef
     #
     config_attr_writer :log_location do |location|
       if location.respond_to? :sync=
-        location.sync = true
         location
       elsif location.respond_to? :to_str
         f = File.new(location.to_str, "a")

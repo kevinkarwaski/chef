@@ -18,6 +18,7 @@
 
 require 'chef/provider/file'
 require 'chef/rest'
+require 'chef/mixin/find_preferred_file'
 require 'uri'
 require 'tempfile'
 require 'net/https'
@@ -26,14 +27,14 @@ class Chef
   class Provider
     class RemoteFile < Chef::Provider::File
 
+      include Chef::Mixin::FindPreferredFile
+
       def load_current_resource
         super
         @current_resource.checksum(checksum(@current_resource.path)) if ::File.exist?(@current_resource.path)
       end
 
       def action_create
-        assert_enclosing_directory_exists!
-
         Chef::Log.debug("Checking #{@new_resource} for changes")
 
         if current_resource_matches_target_checksum?

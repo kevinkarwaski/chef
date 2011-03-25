@@ -3,7 +3,7 @@
 # Author:: Christopher Brown (<cb@opscode.com>)
 # Author:: Christopher Walters (<cw@opscode.com>)
 # Author:: Tim Hinderliter (<tim@opscode.com>)
-# Copyright:: Copyright (c) 2008-2011 Opscode, Inc.
+# Copyright:: Copyright (c) 2008-2010 Opscode, Inc.
 # License:: Apache License, Version 2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,28 +21,26 @@
 
 require 'chef/config'
 require 'chef/cookbook/cookbook_collection'
-require 'chef/nil_argument'
 require 'chef/mixin/check_helper'
 require 'chef/mixin/params_validate'
 require 'chef/mixin/from_file'
 require 'chef/mixin/language_include_attribute'
 require 'chef/mixin/deep_merge'
-require 'chef/environment'
 require 'chef/couchdb'
 require 'chef/rest'
 require 'chef/run_list'
 require 'chef/node/attribute'
 require 'chef/index_queue'
-require 'chef/mash'
+require 'extlib'
 require 'chef/json_compat'
 
 class Chef
   class Node
-
+    
     attr_accessor :recipe_list, :couchdb, :couchdb_rev, :run_state, :run_list
     attr_accessor :override_attrs, :default_attrs, :normal_attrs, :automatic_attrs
     attr_reader :couchdb_id
-
+    
     # TODO: 5/18/2010 cw/timh. cookbook_collection should be removed
     # from here and for any place it's needed, it should be accessed
     # through a Chef::RunContext
@@ -55,7 +53,7 @@ class Chef
     include Chef::IndexQueue::Indexable
 
     DESIGN_DOCUMENT = {
-      "version" => 11,
+      "version" => 9,
       "language" => "javascript",
       "views" => {
         "all" => {
@@ -80,7 +78,7 @@ class Chef
           "map" => <<-EOJS
             function(doc) {
               if (doc.chef_type == "node") {
-                var to_emit = { "name": doc.name, "chef_environment": doc.chef_environment };
+                var to_emit = { "name": doc.name };
                 if (doc["attributes"]["fqdn"]) {
                   to_emit["fqdn"] = doc["attributes"]["fqdn"];
                 } else {
@@ -133,16 +131,6 @@ class Chef
               }
             }
           EOJS
-        },
-        "by_environment" => {
-          "map" => <<-EOJS
-            function(doc) {
-              if (doc.chef_type == "node") {
-                var env = (doc['chef_environment'] == null ? "_default" : doc['chef_environment']);
-                emit(env, doc.name);
-              }
-            }
-          EOJS
         }
       },
     }
@@ -150,8 +138,7 @@ class Chef
     # Create a new Chef::Node object.
     def initialize(couchdb=nil)
       @name = nil
-
-      @chef_environment = '_default'
+      
       @normal_attrs = Mash.new
       @override_attrs = Mash.new
       @default_attrs = Mash.new
@@ -176,7 +163,7 @@ class Chef
       @couchdb_id = value
       @index_id = value
     end
-
+    
     # Used by DSL
     def node
       self
@@ -186,7 +173,7 @@ class Chef
       Chef::REST.new(Chef::Config[:chef_server_url])
     end
 
-    # Find a recipe for this Chef::Node by fqdn.  Will search first for
+    # Find a recipe for this Chef::Node by fqdn.  Will search first for 
     # Chef::Config["node_path"]/fqdn.rb, then hostname.rb, then default.rb.
     #
     # Returns a new Chef::Node object.
@@ -219,19 +206,11 @@ class Chef
       end
     end
 
-    def chef_environment(arg=nil)
-      set_or_return(
-        :chef_environment,
-        arg,
-        { :regex => /^[\-[:alnum:]_]+$/, :kind_of => String }
-      )
-    end
-
     # Used by the DSL
     def attribute
       construct_attributes
     end
-
+    
     def construct_attributes
       Chef::Node::Attribute.new(normal_attrs, default_attrs, override_attrs, automatic_attrs)
     end
@@ -239,7 +218,7 @@ class Chef
     def attribute=(value)
       self.normal_attrs = value
     end
-
+    
     # Return an attribute of this node.  Returns nil if the attribute is not found.
     def [](attrib)
       construct_attributes[attrib]
@@ -256,7 +235,7 @@ class Chef
 
     # Set a normal attribute of this node, but auto-vivifiy any Mashes that
     # might be missing
-    def normal
+    def normal 
       attrs = construct_attributes
       attrs.set_type = :normal
       attrs.auto_vivifiy_on_read = true
@@ -275,10 +254,10 @@ class Chef
       attrs
     end
     alias_method :set_unless, :normal_unless
-
+  
     # Set a default of this node, but auto-vivifiy any Mashes that might
     # be missing
-    def default
+    def default 
       attrs = construct_attributes
       attrs.set_type = :default
       attrs.auto_vivifiy_on_read = true
@@ -297,7 +276,7 @@ class Chef
 
     # Set an override attribute of this node, but auto-vivifiy any Mashes that
     # might be missing
-    def override
+    def override 
       attrs = construct_attributes
       attrs.set_type = :override
       attrs.auto_vivifiy_on_read = true
@@ -351,7 +330,7 @@ class Chef
     def recipe?(recipe_name)
       run_list.include?(recipe_name) || run_state[:seen_recipes].include?(recipe_name)
     end
-
+ 
     # Returns true if this Node expects a given role, false if not.
     def role?(role_name)
       run_list.include?("role[#{role_name}]")
@@ -391,13 +370,7 @@ class Chef
       normal_attrs_to_merge = consume_run_list(attrs)
       Chef::Log.debug("Applying attributes from json file")
       @normal_attrs = Chef::Mixin::DeepMerge.merge(@normal_attrs,normal_attrs_to_merge)
-      self.tags # make sure they're defined
-    end
-
-    # Lazy initializer for tags attribute
-    def tags
-      self[:tags] = [] unless attribute?(:tags)
-      self[:tags]
+      self[:tags] = Array.new unless attribute?(:tags)
     end
 
     # Extracts the run list from +attrs+ and applies it. Returns the remaining attributes
@@ -413,44 +386,37 @@ class Chef
       attrs
     end
 
-    # Clear defaults and overrides, so that any deleted attributes
-    # between runs are still gone.
+    # Clear defaults and overrides, so that any deleted attributes between runs are
+    # still gone.
     def reset_defaults_and_overrides
       @default_attrs = Mash.new
       @override_attrs = Mash.new
     end
 
-    # Expands the node's run list and sets the default and override
-    # attributes. Also applies stored attributes (from json provided
+    # Expands the node's run list and deep merges the default and
+    # override attributes. Also applies stored attributes (from json provided
     # on the command line)
     #
-    # Returns the fully-expanded list of recipes, a RunListExpansion.
+    # Returns the fully-expanded list of recipes.
     #
-    #--
     # TODO: timh/cw, 5-14-2010: Should this method exist? Should we
     # instead modify default_attrs and override_attrs whenever our
     # run_list is mutated? Or perhaps do something smarter like
     # on-demand generation of default_attrs and override_attrs,
     # invalidated only when run_list is mutated?
-    def expand!(data_source = 'server')
-      expansion = run_list.expand(chef_environment, data_source)
+    def expand!
+      # This call should only be called on a chef-client run.
+      expansion = run_list.expand('server')
       raise Chef::Exceptions::MissingRole if expansion.errors?
 
-      self.tags # make sure they're defined
+      self[:tags] = Array.new unless attribute?(:tags)
+      @default_attrs = Chef::Mixin::DeepMerge.merge(default_attrs, expansion.default_attrs)
+      @override_attrs = Chef::Mixin::DeepMerge.merge(override_attrs, expansion.override_attrs)
 
       @automatic_attrs[:recipes] = expansion.recipes
       @automatic_attrs[:roles] = expansion.roles
 
-      expansion
-    end
-
-    # Apply the default and overrides attributes from the expansion
-    # passed in, which came from roles.
-    def apply_expansion_attributes(expansion)
-      @default_attrs = Chef::Mixin::DeepMerge.merge(default_attrs, expansion.default_attrs)
-      environment_attrs = chef_environment == "_default" ? {} : Chef::Environment.load(chef_environment).attributes
-      overrides_before_environments = Chef::Mixin::DeepMerge.merge(override_attrs, expansion.override_attrs)
-      @override_attrs = Chef::Mixin::DeepMerge.merge(overrides_before_environments, environment_attrs)
+      expansion.recipes
     end
 
     # Transform the node to a Hash
@@ -458,7 +424,6 @@ class Chef
       index_hash = Hash.new
       index_hash["chef_type"] = "node"
       index_hash["name"] = name
-      index_hash["chef_environment"] = chef_environment
       attribute.each do |key, value|
         index_hash[key] = value
       end
@@ -472,7 +437,6 @@ class Chef
     def to_json(*a)
       result = {
         "name" => name,
-        "chef_environment" => chef_environment,
         'json_class' => self.class.name,
         "automatic" => automatic_attrs,
         "normal" => normal_attrs,
@@ -485,21 +449,11 @@ class Chef
       result.to_json(*a)
     end
 
-    def update_from!(o)
-      run_list.reset!(o.run_list)
-      @automatic_attrs = o.automatic_attrs
-      @normal_attrs = o.normal_attrs
-      @override_attrs = o.override_attrs
-      @default_attrs = o.default_attrs
-      chef_environment(o.chef_environment)
-      self
-    end
-
     # Create a Chef::Node from JSON
     def self.json_create(o)
       node = new
       node.name(o["name"])
-      node.chef_environment(o["chef_environment"])
+
       if o.has_key?("attributes")
         node.normal_attrs = o["attributes"]
       end
@@ -517,21 +471,6 @@ class Chef
       node.couchdb_id = o["_id"] if o.has_key?("_id")
       node.index_id = node.couchdb_id
       node
-    end
-
-    def self.cdb_list_by_environment(environment, inflate=false, couchdb=nil)
-      rs = (couchdb || Chef::CouchDB.new).get_view("nodes", "by_environment", :include_docs => inflate, :startkey => environment, :endkey => environment)
-      inflate ? rs["rows"].collect {|r| r["doc"]} : rs["rows"].collect {|r| r["value"]}
-    end
-
-    def self.list_by_environment(environment, inflate=false)
-      if inflate
-        response = Hash.new
-        Chef::Search::Query.new.search(:node, "chef_environment:#{environment}") {|n| response[n.name] = n unless n.nil?}
-        response
-      else
-        Chef::REST.new(Chef::Config[:chef_server_url]).get_rest("environments/#{environment}/nodes")
-      end
     end
 
     # List all the Chef::Node objects in the CouchDB.  If inflate is set to true, you will get
@@ -578,7 +517,6 @@ class Chef
     def self.build(node_name)
       node = new
       node.name(node_name)
-      node.chef_environment(Chef::Config[:environment]) unless Chef::Config[:environment].nil? || Chef::Config[:environment].chop.empty?
       node
     end
 
@@ -625,11 +563,11 @@ class Chef
     def self.create_design_document(couchdb=nil)
       (couchdb || Chef::CouchDB.new).create_design_document("nodes", DESIGN_DOCUMENT)
     end
-
+    
     def to_s
       "node[#{name}]"
     end
-
+    
     # Load all attribute files for all cookbooks associated with this
     # node.
     def load_attributes
@@ -640,7 +578,7 @@ class Chef
         end
       end
     end
-
+    
     # Used by DSL.
     # Loads the attribute file specified by the short name of the
     # file, e.g., loads specified cookbook's
@@ -650,7 +588,7 @@ class Chef
     def load_attribute_by_short_filename(name, src_cookbook_name)
       src_cookbook = cookbook_collection[src_cookbook_name]
       raise Chef::Exceptions::CookbookNotFound, "could not find cookbook #{src_cookbook_name} while loading attribute #{name}" unless src_cookbook
-
+      
       attribute_filename = src_cookbook.attribute_filenames_by_short_filename[name]
       raise Chef::Exceptions::AttributeNotFound, "could not find filename for attribute #{name} in cookbook #{src_cookbook_name}" unless attribute_filename
 

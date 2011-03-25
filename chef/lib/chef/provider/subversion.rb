@@ -6,9 +6,9 @@
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-#
+# 
 #     http://www.apache.org/licenses/LICENSE-2.0
-#
+# 
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -25,9 +25,9 @@ require 'fileutils'
 class Chef
   class Provider
     class Subversion < Chef::Provider
-
+      
       include Chef::Mixin::Command
-
+      
       def load_current_resource
         @current_resource = Chef::Resource::Subversion.new(@new_resource.name)
 
@@ -37,7 +37,7 @@ class Chef
           end
         end
       end
-
+      
       def action_checkout
         assert_target_directory_valid!
         if target_dir_non_existant_or_empty?
@@ -47,7 +47,7 @@ class Chef
           Chef::Log.info "Taking no action, checkout destination #{@new_resource.destination} already exists or is a non-empty directory"
         end
       end
-
+      
       def action_export
         assert_target_directory_valid!
         if target_dir_non_existant_or_empty?
@@ -57,13 +57,13 @@ class Chef
           Chef::Log.info "Taking no action, export destination #{@new_resource.destination} already exists or is a non-empty directory"
         end
       end
-
+      
       def action_force_export
         assert_target_directory_valid!
         run_command(run_options(:command => export_command))
         @new_resource.updated_by_last_action(true)
       end
-
+      
       def action_sync
         assert_target_directory_valid!
         if ::File.exist?(::File.join(@new_resource.destination, ".svn"))
@@ -79,18 +79,18 @@ class Chef
           @new_resource.updated_by_last_action(true)
         end
       end
-
+      
       def sync_command
         Chef::Log.info "Updating working copy #{@new_resource.destination} to revision #{@new_resource.revision}"
         scm :update, @new_resource.svn_arguments, verbose, authentication, "-r#{revision_int}", @new_resource.destination
       end
-
+      
       def checkout_command
         Chef::Log.info "checking out #{@new_resource.repository} at revision #{@new_resource.revision} to #{@new_resource.destination}"
-        scm :checkout, @new_resource.svn_arguments, verbose, authentication,
+        scm :checkout, @new_resource.svn_arguments, verbose, authentication, 
             "-r#{revision_int}", @new_resource.repository, @new_resource.destination
       end
-
+      
       def export_command
         Chef::Log.info "exporting #{@new_resource.repository} at revision #{@new_resource.revision} to #{@new_resource.destination}"
         args = ["--force"]
@@ -98,7 +98,7 @@ class Chef
             "-r#{revision_int}" << @new_resource.repository << @new_resource.destination
         scm :export, *args
       end
-
+      
       # If the specified revision isn't an integer ("HEAD" for example), look
       # up the revision id by asking the server
       # If the specified revision is an integer, trust it.
@@ -114,14 +114,14 @@ class Chef
           end
         end
       end
-
+      
       alias :revision_slug :revision_int
-
+      
       def find_current_revision
         return nil unless ::File.exist?(::File.join(@new_resource.destination, ".svn"))
         command = scm(:info)
         status, svn_info, error_message = output_of_command(command, run_options(:cwd => cwd))
-
+        
         unless [0,1].include?(status.exitstatus)
           handle_command_failures(status, "STDOUT: #{svn_info}\nSTDERR: #{error_message}")
         end
@@ -137,17 +137,17 @@ class Chef
         run_opts[:group] = @new_resource.group if @new_resource.group
         run_opts
       end
-
+      
       private
-
+      
       def cwd
         @new_resource.destination
       end
-
+      
       def verbose
         "-q"
       end
-
+      
       def extract_revision_info(svn_info)
         begin
           repo_attrs = YAML.load(svn_info)
@@ -160,7 +160,7 @@ class Chef
         Chef::Log.debug "Resolved revision #{@new_resource.revision} to #{rev}"
         rev
       end
-
+      
       # If a username is configured for the SCM, return the command-line
       # switches for that. Note that we don't need to return the password
       # switch, since Capistrano will check for that prompt in the output
@@ -171,7 +171,7 @@ class Chef
         result << "--password #{@new_resource.svn_password} "
         result
       end
-
+      
       def scm(*args)
         ['svn', *args].compact.join(" ")
       end

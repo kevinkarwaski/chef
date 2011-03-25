@@ -30,10 +30,7 @@ validation_client_name "<%= Chef::Config[:validation_client_name] %>"
 # Using default node name"
 <% else %>
 node_name "<%= @config[:chef_node_name] %>"
-<% end %>
-<% if Chef::Config[:environment] != nil %>
-environment "<%= Chef::Config[:environment]%>"
-<% end %>
+<% end %> 
 EOP
 ) > /etc/chef/client.rb
 

@@ -1,17 +1,17 @@
+#
 # Author:: Adam Jacob (<adam@opscode.com>)
 # Author:: Nuo Yan (<nuo@opscode.com>)
 # Author:: Christopher Walters (<cw@opscode.com>)
 # Author:: Tim Hinderliter (<tim@opscode.com>)
-# Author:: Seth Falcon (<seth@opscode.com>)
-# Copyright:: Copyright 2008-2010 Opscode, Inc.
+# Copyright:: Copyright (c) 2008-2010 Opscode, Inc.
 # License:: Apache License, Version 2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-#
+# 
 #     http://www.apache.org/licenses/LICENSE-2.0
-#
+# 
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -26,8 +26,6 @@ require 'chef/recipe'
 require 'chef/cookbook/file_vendor'
 require 'chef/checksum'
 
-require 'chef/version_class'
-
 class Chef
   # == Chef::CookbookVersion
   # CookbookVersion is a model object encapsulating the data about a Chef
@@ -39,17 +37,16 @@ class Chef
   # recipe_filenames.insert) should dirty the manifest so it gets regenerated.
   class CookbookVersion
     include Chef::IndexQueue::Indexable
-    include Comparable
 
     COOKBOOK_SEGMENTS = [ :resources, :providers, :recipes, :definitions, :libraries, :attributes, :files, :templates, :root_files ]
-
+    
     DESIGN_DOCUMENT = {
       "version" => 7,
       "language" => "javascript",
       "views" => {
         "all" => {
           "map" => <<-EOJS
-          function(doc) {
+          function(doc) { 
             if (doc.chef_type == "cookbook_version") {
               emit(doc.name, doc);
             }
@@ -58,7 +55,7 @@ class Chef
         },
         "all_id" => {
           "map" => <<-EOJS
-          function(doc) {
+          function(doc) { 
             if (doc.chef_type == "cookbook_version") {
               emit(doc.name, doc.name);
             }
@@ -67,7 +64,7 @@ class Chef
         },
         "all_with_version" => {
           "map" => <<-EOJS
-          function(doc) {
+          function(doc) { 
             if (doc.chef_type == "cookbook_version") {
               emit(doc.cookbook_name, doc.version);
             }
@@ -76,7 +73,7 @@ class Chef
         },
         "all_latest_version" => {
           "map" => %q@
-          function(doc) {
+          function(doc) { 
             if (doc.chef_type == "cookbook_version") {
               emit(doc.cookbook_name, doc.version);
             }
@@ -88,12 +85,12 @@ class Chef
 
             for (var idx in values) {
               var value = values[idx];
-
+              
               if (idx == 0) {
                 result = value;
                 continue;
               }
-
+              
               var valueParts = value.split('.').map(function(v) { return parseInt(v); });
               var resultParts = result.split('.').map(function(v) { return parseInt(v); });
 
@@ -190,7 +187,7 @@ class Chef
 
     attr_reader :recipe_filenames_by_name
     attr_reader :attribute_filenames_by_short_filename
-
+    
     # This is the one and only method that knows how cookbook files'
     # checksums are generated.
     def self.checksum_cookbook_file(filepath)
@@ -199,7 +196,7 @@ class Chef
       Chef::Log.debug("File #{filepath} does not exist, so there is no checksum to generate")
       nil
     end
-
+    
     # Keep track of the filenames that we use in both eager cookbook
     # downloading (during sync_cookbooks) and lazy (during the run
     # itself, through FileVendor). After the run is over, clean up the
@@ -227,8 +224,7 @@ class Chef
     # === Returns
     # true:: Always returns true
     def self.sync_cookbooks(cookbook_hash)
-      Chef::Log.info("Loading cookbooks [#{cookbook_hash.keys.sort.join(', ')}]")
-      Chef::Log.debug("Cookbooks detail: #{cookbook_hash.inspect}")
+      Chef::Log.debug("Cookbooks to load: #{cookbook_hash.inspect}")
 
       clear_obsoleted_cookbooks(cookbook_hash)
 
@@ -321,7 +317,7 @@ class Chef
         # manifest.
         cache.find(File.join(%w{cookbooks ** *})).each do |cache_filename|
           unless valid_cache_entries[cache_filename]
-            Chef::Log.info("Removing #{cache_filename} from the cache; it is no longer needed by chef-client.")
+            Chef::Log.info("Removing #{cache_filename} from the cache; it is no longer on the server.")
             cache.delete(cache_filename)
           end
         end
@@ -333,7 +329,7 @@ class Chef
       cleanup_file_cache
     end
 
-    # Creates a new Chef::CookbookVersion object.
+    # Creates a new Chef::CookbookVersion object.  
     #
     # === Returns
     # object<Chef::CookbookVersion>:: Duh. :)
@@ -363,7 +359,7 @@ class Chef
     def version
       metadata.version
     end
-
+    
     def version=(new_version)
       manifest["version"] = new_version
       metadata.version(new_version)
@@ -379,7 +375,7 @@ class Chef
     #     :version = "1.0",
     #     :name = "Apache 2"
     #     :metadata = ???TODO: timh/cw: 5-24-2010: describe this format,
-    #
+    #   
     #     :files => [
     #       {
     #         :name => "afile.rb",
@@ -397,7 +393,7 @@ class Chef
       end
       @manifest
     end
-
+    
     def manifest=(new_manifest)
       @manifest = Mash.new new_manifest
       @checksums = extract_checksums_from_manifest(@manifest)
@@ -406,7 +402,7 @@ class Chef
       COOKBOOK_SEGMENTS.each do |segment|
         next unless @manifest.has_key?(segment)
         filenames = @manifest[segment].map{|manifest_record| manifest_record['name']}
-
+        
         if segment == :recipes
           self.recipe_filenames = filenames
         elsif segment == :attributes
@@ -417,7 +413,7 @@ class Chef
         end
       end
     end
-
+    
     # Returns a hash of checksums to either nil or the on disk path (which is
     # done by generate_manifest).
     def checksums
@@ -430,17 +426,17 @@ class Chef
     def full_name
       "#{name}-#{version}"
     end
-
+    
     def attribute_filenames=(*filenames)
       @attribute_filenames = filenames.flatten
       @attribute_filenames_by_short_filename = filenames_by_name(attribute_filenames)
       attribute_filenames
     end
-
+    
     ## BACKCOMPAT/DEPRECATED - Remove these and fix breakage before release [DAN - 5/20/2010]##
     alias :attribute_files :attribute_filenames
     alias :attribute_files= :attribute_filenames=
-
+    
     # Return recipe names in the form of cookbook_name::recipe_name
     def fully_qualified_recipe_names
       results = Array.new
@@ -449,17 +445,17 @@ class Chef
       end
       results
     end
-
+    
     def recipe_filenames=(*filenames)
       @recipe_filenames = filenames.flatten
       @recipe_filenames_by_name = filenames_by_name(recipe_filenames)
       recipe_filenames
     end
-
+    
     ## BACKCOMPAT/DEPRECATED - Remove these and fix breakage before release [DAN - 5/20/2010]##
     alias :recipe_files :recipe_filenames
     alias :recipe_files= :recipe_filenames=
-
+    
     # called from DSL
     def load_recipe(recipe_name, run_context)
       unless recipe_filenames_by_name.has_key?(recipe_name)
@@ -473,7 +469,7 @@ class Chef
       unless recipe_filename
         raise Chef::Exceptions::RecipeNotFound, "could not find recipe #{recipe_name} for cookbook #{name}"
       end
-
+      
       recipe.from_file(recipe_filename)
       recipe
     end
@@ -523,7 +519,7 @@ class Chef
       # ensure that we generate the manifest, which will also generate
       # @manifest_records_by_path
       manifest
-
+      
       # in order of prefernce, look for the filename in the manifest
       found_pref = preferences.find {|preferred_filename| @manifest_records_by_path[preferred_filename] }
       if found_pref
@@ -532,7 +528,7 @@ class Chef
         raise Chef::Exceptions::FileNotFound, "cookbook #{name} does not contain file #{segment}/#{filename}"
       end
     end
-
+    
     def preferred_filename_on_disk_location(node, segment, filename, current_filepath=nil)
       manifest_record = preferred_manifest_record(node, segment, filename)
       if current_filepath && (manifest_record['checksum'] == self.class.checksum_cookbook_file(current_filepath))
@@ -598,7 +594,7 @@ class Chef
           # preferences_for_path returns. It could be
           # "files/ubuntu-9.10/dirname", for example.
           specificity_dirname = $1
-
+          
           # Record the specificity_dirname only if it's in the list of
           # valid preferences
           if records_by_pref[specificity_dirname]
@@ -606,9 +602,9 @@ class Chef
           end
         end
       end
-
+      
       best_pref = preferences.find { |pref| !records_by_pref[pref].empty? }
-
+        
       raise Chef::Exceptions::FileNotFound, "cookbook #{name} has no directory #{segment}/#{dirname}" unless best_pref
 
       records_by_pref[best_pref]
@@ -632,7 +628,7 @@ class Chef
             raise
           end
         end
-
+        
         fqdn = node[:fqdn]
 
         # Most specific to least specific places to find the path
@@ -677,7 +673,7 @@ class Chef
       cookbook_version.metadata = Chef::Cookbook::Metadata.from_hash(o["metadata"])
       cookbook_version
     end
-
+    
     def generate_manifest_with_urls(&url_generator)
       rendered_manifest = manifest.dup
       COOKBOOK_SEGMENTS.each do |segment|
@@ -761,7 +757,7 @@ class Chef
     ##
     # Couchdb
     ##
-
+    
     def self.cdb_by_name(cookbook_name, couchdb=nil)
       cdb = (couchdb || Chef::CouchDB.new)
       options = { :startkey => cookbook_name, :endkey => cookbook_name }
@@ -791,13 +787,9 @@ class Chef
     end
 
     def self.cdb_list(inflate=false, couchdb=nil)
-      couchdb ||= Chef::CouchDB.new
-      if inflate
-        couchdb.list("cookbooks", true)["rows"].collect{|r| r["value"]}
-      else
-        # If you modify this, please make sure the desc sorted order on the versions doesn't get broken.
-        couchdb.get_view("cookbooks", "all_with_version")["rows"].inject({}) { |mapped, row| mapped[row["key"]]||=Array.new; mapped[row["key"]].push(Chef::Version.new(row["value"])); mapped[row["key"]].sort!.reverse!; mapped}
-      end
+      rs = (couchdb || Chef::CouchDB.new).list("cookbooks", inflate)
+      lookup = (inflate ? "value" : "key")
+      rs["rows"].collect { |r| r[lookup] }            
     end
 
     def self.cdb_load(name, version='latest', couchdb=nil)
@@ -815,7 +807,7 @@ class Chef
     end
 
     # Runs on Chef Server (API); deletes the cookbook from couchdb and also destroys associated
-    # checksum documents
+    # checksum documents 
     def purge
       checksums.keys.each do |checksum|
         begin
@@ -835,16 +827,8 @@ class Chef
       @index_id = value
     end
 
-    def <=>(o)
-      raise Chef::Exceptions::CookbookVersionNameMismatch if self.name != o.name
-      # FIXME: can we change the interface to the Metadata class such
-      # that metadata.version returns a Chef::Version instance instead
-      # of a string?
-      Chef::Version.new(self.version) <=> Chef::Version.new(o.version)
-    end
-
     private
-
+    
     # For each filename, produce a mapping of base filename (i.e. recipe name
     # or attribute file) to on disk location
     def filenames_by_name(filenames)
@@ -874,7 +858,7 @@ class Chef
           file_name = nil
           path = nil
           specificity = "default"
-
+          
           if segment == :root_files
             matcher = segment_file.match(".+/#{Regexp.escape(name.to_s)}/(.+)")
             file_name = matcher[1]
@@ -893,7 +877,7 @@ class Chef
             path = matcher[1]
             file_name = matcher[2]
           end
-
+          
           csum = self.class.checksum_cookbook_file(segment_file)
           checksums_to_on_disk_paths[csum] = segment_file
           rs = Mash.new({
@@ -916,7 +900,7 @@ class Chef
       @manifest = manifest
       @manifest_records_by_path = extract_manifest_records_by_path(manifest)
     end
-
+    
     def file_vendor
       unless @file_vendor
         @file_vendor = Chef::Cookbook::FileVendor.create_from_manifest(manifest)
@@ -934,7 +918,7 @@ class Chef
       end
       checksums
     end
-
+    
     def extract_manifest_records_by_path(manifest)
       manifest_records_by_path = {}
       COOKBOOK_SEGMENTS.each do |segment|
@@ -945,6 +929,6 @@ class Chef
       end
       manifest_records_by_path
     end
-
+    
   end
 end

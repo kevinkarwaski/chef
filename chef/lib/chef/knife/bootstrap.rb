@@ -6,15 +6,16 @@
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-#
+# 
 #     http://www.apache.org/licenses/LICENSE-2.0
-#
+# 
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+# Test
 
 require 'chef/knife'
 require 'chef/json_compat'
@@ -31,13 +32,18 @@ class Chef
         :short => "-x USERNAME",
         :long => "--ssh-user USERNAME",
         :description => "The ssh username",
-        :default => "root"
+        :default => "root" 
 
       option :ssh_password,
         :short => "-P PASSWORD",
         :long => "--ssh-password PASSWORD",
         :description => "The ssh password"
-
+        
+      option :ssh_port,
+        :short => "-p PORT",
+        :long => "--ssh-port PORT",
+        :description => "The ssh port"
+      
       option :identity_file,
         :short => "-i IDENTITY_FILE",
         :long => "--identity-file IDENTITY_FILE",
@@ -72,14 +78,8 @@ class Chef
         :short => "-r RUN_LIST",
         :long => "--run-list RUN_LIST",
         :description => "Comma separated list of roles/recipes to apply",
-        :proc => lambda { |o| o.split(/[\s,]+/) },
+        :proc => lambda { |o| o.split(",") },
         :default => []
-
-      option :no_host_key_verify,
-        :long => "--no-host-key-verify",
-        :description => "Disable host key verification",
-        :boolean => true,
-        :default => false
 
       def h
         @highline ||= HighLine.new
@@ -107,7 +107,7 @@ class Chef
         end
 
         Chef::Log.debug("Found bootstrap template in #{File.dirname(template)}")
-
+        
         IO.read(template).chomp
       end
 
@@ -118,15 +118,16 @@ class Chef
         Erubis::Eruby.new(template).evaluate(context)
       end
 
-      def run
+      def run 
         require 'highline'
-        require 'net/ssh'
 
         validate_name_args!
 
         $stdout.sync = true
 
-        Chef::Log.info("Bootstrapping Chef on #{h.color(Array(@name_args).first, :bold)}")
+        Chef::Log.info("Bootstrapping Chef on #{h.color(config[:server_name], :bold)}")
+
+        knife_ssh.load_late_dependencies
 
         begin
           knife_ssh.run
@@ -152,11 +153,11 @@ class Chef
       def knife_ssh
         ssh = Chef::Knife::Ssh.new
         ssh.name_args = [ server_name, ssh_command ]
-        ssh.config[:ssh_user] = config[:ssh_user]
+        ssh.config[:ssh_user] = config[:ssh_user] 
         ssh.config[:ssh_password] = config[:ssh_password]
+        ssh.config[:ssh_port] = config[:ssh_port]
         ssh.config[:identity_file] = config[:identity_file]
         ssh.config[:manual] = true
-        ssh.config[:no_host_key_verify] = config[:no_host_key_verify]
         ssh
       end
 

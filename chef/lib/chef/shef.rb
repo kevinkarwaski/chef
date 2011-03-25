@@ -15,14 +15,14 @@
 # limitations under the License.
 #
 
-require 'singleton'
-require 'pp'
-require 'etc'
-require 'mixlib/cli'
+require "singleton"
+require "pp"
+require "etc"
+require "mixlib/cli"
 
 require 'chef/version'
-require 'chef/client'
-require 'chef/config'
+require "chef/client"
+require "chef/config"
 
 require 'chef/shef/shef_session'
 require 'chef/shef/ext'

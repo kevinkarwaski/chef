@@ -39,18 +39,22 @@ class Chef
         :long => "--all",
         :description => "Upload all cookbooks, rather than just a single cookbook"
 
-      def run
-        config[:cookbook_path] ||= Chef::Config[:cookbook_path]
+      def run 
+        if config[:cookbook_path]
+          Chef::Config[:cookbook_path] = config[:cookbook_path]
+        else
+          config[:cookbook_path] = Chef::Config[:cookbook_path]
+        end
 
-        Chef::Cookbook::FileVendor.on_create { |manifest| Chef::Cookbook::FileSystemFileVendor.new(manifest, config[:cookbook_path]) }
+        Chef::Cookbook::FileVendor.on_create { |manifest| Chef::Cookbook::FileSystemFileVendor.new(manifest) }
 
-        cl = Chef::CookbookLoader.new(config[:cookbook_path])
+        cl = Chef::CookbookLoader.new
 
         humanize_auth_exceptions do
           if config[:all]
             cl.each do |cookbook_name, cookbook|
               Chef::Log.info("** #{cookbook.name.to_s} **")
-              Chef::CookbookUploader.new(cookbook, config[:cookbook_path]).upload_cookbook
+              Chef::CookbookUploader.upload_cookbook(cookbook)
             end
           else
             if @name_args.length < 1
@@ -60,7 +64,7 @@ class Chef
             end
             @name_args.each do |cookbook_name|
               if cl.cookbook_exists?(cookbook_name)
-                Chef::CookbookUploader.new(cl[cookbook_name], config[:cookbook_path]).upload_cookbook
+                Chef::CookbookUploader.upload_cookbook(cl[cookbook_name])
               else
                 Chef::Log.error("Could not find cookbook #{cookbook_name} in your cookbook path, skipping it")
               end

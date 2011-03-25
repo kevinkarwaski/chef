@@ -3,8 +3,7 @@
 # Author:: Nuo Yan (<nuoyan@opscode.com>)
 # Author:: Tim Hinderliter (<tim@opscode.com>)
 # Author:: Christopher Walters (<cw@opscode.com>)
-# Author:: Seth Falcon (<seth@opscode.com>)
-# Copyright:: Copyright (c) 2008-2011 Opscode, Inc.
+# Copyright:: Copyright (c) 2008-2010 Opscode, Inc.
 # License:: Apache License, Version 2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,13 +20,10 @@
 
 require 'chef/run_list/run_list_item'
 require 'chef/run_list/run_list_expansion'
-require 'chef/run_list/versioned_recipe_list'
-require 'chef/mixin/params_validate'
 
 class Chef
   class RunList
     include Enumerable
-    include Chef::Mixin::ParamsValidate
 
     # @run_list_items is an array of RunListItems that describe the items to 
     # execute in order. RunListItems can load from and convert to the string
@@ -42,8 +38,8 @@ class Chef
     # For backwards compat
     alias :run_list :run_list_items
 
-    def initialize(*run_list_items)
-      @run_list_items = run_list_items.map { |i| coerce_to_run_list_item(i) }
+    def initialize
+      @run_list_items = Array.new
     end
 
     def role_names
@@ -61,12 +57,10 @@ class Chef
     # Add an item of the form "recipe[foo::bar]" or "role[webserver]";
     # takes a String or a RunListItem
     def <<(run_list_item)
-      run_list_item = coerce_to_run_list_item(run_list_item)
+      run_list_item = run_list_item.kind_of?(RunListItem) ? run_list_item : parse_entry(run_list_item)
       @run_list_items << run_list_item unless @run_list_items.include?(run_list_item)
       self
     end
-
-    alias :push :<<
 
     def ==(other)
       if other.kind_of?(Chef::RunList)
@@ -75,17 +69,13 @@ class Chef
         return false unless other.respond_to?(:size) && (other.size == @run_list_items.size)
         other_run_list_items = other.dup
 
-        other_run_list_items.map! { |item| coerce_to_run_list_item(item) }
+        other_run_list_items.map! { |item| item.kind_of?(RunListItem) ? item : RunListItem.new(item) }
         other_run_list_items == @run_list_items
       end
     end
 
     def to_s
       @run_list_items.join(", ")
-    end
-
-    def to_json(*args)
-      to_a.to_json(*args)
     end
 
     def empty?
@@ -128,37 +118,32 @@ class Chef
       @run_list_items.delete_if{|i| i == item}
       self
     end
-    alias :delete :remove
 
-    # Expands this run_list: recursively expand roles into their included
-    # recipes.
-    # Returns a RunListExpansion object.
-    def expand(environment, data_source='server', expansion_opts={})
-      expansion = expansion_for_data_source(environment, data_source, expansion_opts)
+    def expand(data_source='server', couchdb=nil, rest=nil)
+      couchdb = couchdb ? couchdb : Chef::CouchDB.new
+
+      expansion = expansion_for_data_source(data_source, :couchdb => couchdb, :rest => rest)
       expansion.expand
       expansion
     end
 
     # Converts a string run list entry to a RunListItem object.
+    # TODO: 5/27/2010 cw: this method has become nothing more than a proxy, revisit its necessity
     def parse_entry(entry)
       RunListItem.new(entry)
     end
 
-    def coerce_to_run_list_item(item)
-      item.kind_of?(RunListItem) ? item : parse_entry(item)
-    end
-
-    def expansion_for_data_source(environment, data_source, opts={})
+    def expansion_for_data_source(data_source, opts={})
+      data_source = 'disk' if Chef::Config[:solo]
       case data_source.to_s
       when 'disk'
-        RunListExpansionFromDisk.new(environment, @run_list_items)
+        RunListExpansionFromDisk.new(@run_list_items)
       when 'server'
-        RunListExpansionFromAPI.new(environment, @run_list_items, opts[:rest])
+        RunListExpansionFromAPI.new(@run_list_items, opts[:rest])
       when 'couchdb'
-        RunListExpansionFromCouchDB.new(environment, @run_list_items, opts[:couchdb])
+        RunListExpansionFromCouchDB.new(@run_list_items, opts[:couchdb])
       end
     end
-
 
   end
 end
